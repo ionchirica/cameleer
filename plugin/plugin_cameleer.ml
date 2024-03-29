@@ -24,6 +24,15 @@ let use_std_lib =
   in
   [ use_stdlib ]
 
+let use_cursor_lib =
+  let dummy_pos = Loc.dummy_position in
+  let stdlib = Qdot (Qident (T.mk_id "cursor"), T.mk_id "ListCursor") in
+  let use_stdlib =
+    Odecl.mk_duseimport dummy_pos ~import:false [ (stdlib, None) ]
+  in
+  [ use_stdlib ]
+
+
 let mk_info () =
   let info = Odecl.empty_info () in
   Odecl.add_info info "Some" 1;
@@ -172,6 +181,7 @@ let read_channel env path file c =
   (* This is the beginning of the top module construction *)
   let info = mk_info () in
   let f = Declaration.s_structure info f in
+  let f = use_cursor_lib @ f in
   let f = use_std_lib @ f in
   let rec pp_list pp fmt l =
     match l with

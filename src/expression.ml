@@ -86,6 +86,22 @@ let mk_efun binder_list pty pat mask spec expr =
 let mk_efun_visible binder_list pty spec expr =
   mk_efun binder_list pty (T.mk_pattern Pwild) Ity.MaskVisible spec expr
 
+let mk_id n =
+  T.mk_id n ~id_loc: Loc.dummy_position ~id_ats: []
+
+let simplify_let_pattern ?loc kind d pat e =
+let cast e ty = { e with expr_desc = Ecast (e,ty) } in
+let rec unfold gh d p = match p.pat_desc with
+  | Pparen p | Pscope (_,p) -> unfold gh d p
+  | Pghost p -> unfold true d p
+  | Pcast (p,ty) -> unfold gh (cast d ty) p
+  | Pvar id -> Elet (id, gh, kind, d, e)
+  (* | Ptuple [] -> unfold gh (cast d (PTtuple [])) (re_pat p Pwild) *)
+  (* | Pwild -> Elet (id_anonymous p.pat_loc, gh, kind, d, e) *)
+  | _ when kind = Expr.RKnone -> Ematch (d, [pat, e], [])
+  | _ -> Loc.errorm ?loc "illegal kind qualifier" in
+unfold false d pat
+
 let mk_eraise id expr = Eraise (id, expr)
 let mk_eidapp id expr_list = Eidapp (id, expr_list)
 let mk_eidapp_no_args id = mk_eidapp id []
@@ -131,6 +147,50 @@ let rec longident ?(id_loc = T.dummy_loc) ?(prefix = "") = function
   | _ -> assert false
 (* TODO *)
 
+
+let mk_iter (iter_attr: Uast.iter_attr) =
+  let f, c, inv = iter_attr.iter_spec in
+
+  let id_b = mk_id "'Break'"  in
+  let id_c = mk_id "'Continue'"  in
+  let it = mk_id "it"  in
+  let tv = mk_id "type_variant"  in
+  let x = mk_id "x"  in
+  let mkt d = T.mk_term ~term_loc: Loc.dummy_position d in
+  let mk d = mk_expr ~expr_loc: Loc.dummy_position d in
+  let lcursor = mk_id "ListCursor"  in
+  let inv = Tapply(T.term false inv, T.mk_term ~term_loc: Loc.dummy_position Ttrue) in
+
+  (* variant { it.type_variant }*)
+  let var = T.mk_term ~term_loc: Loc.dummy_position
+              (Tapply(
+                   T.mk_term ~term_loc: (Loc.user_position "c" 3 3 3 3) (Tident (Qident tv)),
+                   T.mk_term ~term_loc: (Loc.user_position "b" 2 2 2 2) (Tident (Qident it))
+              )) in
+
+  let q s = Qdot(Qident lcursor, mk_id s) in
+  let next = mk (Eidapp ((q "next"), [mk (Eident (Qident (it)))])) in
+  let f = match f.spexp_desc with
+    | Uast.Sexp_ident { txt; loc } ->
+      Eident (longident ~id_loc:(T.location loc) txt)
+    | _ -> assert false in
+  let c = match c.spexp_desc with
+    | Uast.Sexp_ident { txt; loc } ->
+      Eident (longident ~id_loc:(T.location loc) txt)
+    | _ -> assert false in
+  let c = mk c in
+  let f = mk f in
+  let x' = mk (Eident(Qident( x ))) in
+  let unit = mk_expr (Etuple []) ~expr_loc: (Loc.user_position "a" 1 1 1 1) in
+  let e = mk (Eapply(f, x')) in
+  let e = mk(simplify_let_pattern Expr.RKnone next (T.mk_pattern (Pvar (x))) e) in
+  let e = { e with expr_desc = Eoptexn (id_c, Ity.MaskVisible, e) } in
+  let e = mk (Ewhile(mk Etrue, [mkt inv], [var, None], e )) in
+  let e = mk (Eoptexn(id_b, Ity.MaskVisible, e)) in
+  let e = mk (Ematch (e, [], [q "Done", None, unit])) in
+  let create = mk(Eidapp(q "create", [c])) in
+  Elet(it, false, Expr.RKnone, create, e)
+
 let rec core_type P.{ ptyp_desc; ptyp_loc; _ } =
   match ptyp_desc with
   | Ptyp_any -> assert false (* TODO *)
@@ -152,15 +212,15 @@ let rec core_type P.{ ptyp_desc; ptyp_loc; _ } =
   | Ptyp_extension _ -> assert false
 (* TODO *)
 
-let rec id_of_pat P.{ ppat_desc; _ } =
+let rec id_of_pat P.{ ppat_desc; ppat_loc; _ } =
   match ppat_desc with
   | Ppat_var { txt; loc } -> T.(mk_id ~id_loc:(location loc) txt)
   | Ppat_any -> assert false (* TODO *)
   | Ppat_alias _ -> assert false (* TODO *)
   | Ppat_constant _ -> assert false (* TODO *)
   | Ppat_interval _ -> assert false (* TODO *)
-  | Ppat_tuple _ -> assert false (* TODO *)
-  | Ppat_construct _ -> assert false (* TODO *)
+  | Ppat_tuple _ -> assert false
+  | Ppat_construct _ -> T.(mk_id ~id_loc:(location ppat_loc) "unit")
   | Ppat_variant _ -> assert false (* TODO *)
   | Ppat_record _ -> assert false (* TODO *)
   | Ppat_array _ -> assert false (* TODO *)
@@ -409,25 +469,32 @@ let rec term info Uast.{ spexp_desc = p_desc; spexp_loc; _ } =
         (* TODO *)
         Tquant (Why3.Dterm.DTlambda, [ binder ], [], term info expr_fun)
     | Sexp_fun _ -> assert false (* TODO *)
-    | Uast.Sexp_apply (s, [ arg1; arg2 ]) when is_and s.spexp_desc ->
+    | Uast.Sexp_apply (s, [ arg1; arg2 ], iter_attr) when is_and s.spexp_desc ->
+       ignore iter_attr;
         Tbinop (arg_term arg1, Why3.Dterm.DTand, arg_term arg2)
-    | Uast.Sexp_apply (s, [ arg1; arg2 ]) when is_array_get s.spexp_desc ->
+    | Uast.Sexp_apply (s, [ arg1; arg2 ], iter_attr) when is_array_get s.spexp_desc ->
+       ignore iter_attr;
         let id_app = Qdot (Qident (T.mk_id "Array"), T.mk_id "mixfix []") in
         Tidapp (id_app, [ arg_term arg1; arg_term arg2 ])
-    | Uast.Sexp_apply (s, [ arg1; arg2 ]) when is_or s.spexp_desc ->
+    | Uast.Sexp_apply (s, [ arg1; arg2 ], iter_attr) when is_or s.spexp_desc ->
+       ignore iter_attr;
         ignore arg1;
         ignore arg2;
         assert false (* TODO *)
-    | Uast.Sexp_apply (s, [ arg ]) when is_not s.spexp_desc ->
+    | Uast.Sexp_apply (s, [ arg ], iter_attr) when is_not s.spexp_desc ->
+       ignore iter_attr;
         ignore arg;
         assert false (* TODO *)
-    | Uast.Sexp_apply (s, [ (_, arg) ]) when is_raise s.spexp_desc ->
+    | Uast.Sexp_apply (s, [ (_, arg) ], iter_attr) when is_raise s.spexp_desc ->
+       ignore iter_attr;
         ignore arg;
         assert false (* TODO *)
-    | Uast.Sexp_apply ({ spexp_desc = Sexp_ident s; _ }, arg_expr_list) ->
+    | Uast.Sexp_apply ({ spexp_desc = Sexp_ident s; _ }, arg_expr_list, iter_attr) ->
+       ignore iter_attr;
         let id_loc = T.location s.loc in
         Tidapp (longident ~id_loc s.txt, List.map term_expr arg_expr_list)
-    | Uast.Sexp_apply (expr, arg_expr_list) ->
+    | Uast.Sexp_apply (expr, arg_expr_list, iter_attr) ->
+       ignore iter_attr;
         let mk_app acc (_, e) = mk_term (Tapply (acc, term info e)) in
         let e_acc = term info expr in
         (List.fold_left mk_app e_acc arg_expr_list).term_desc
@@ -593,17 +660,25 @@ let rec expression_desc info expr_loc expr_desc =
       let binder, binder_info = binder_of_pattern info pat in
       let expr_fun = special_binder (expression info expr_fun) binder_info in
       mk_efun_visible [ binder ] None spec expr_fun
-  | Uast.Sexp_apply (s, [ arg1; arg2 ]) when is_and s.spexp_desc ->
+  | Uast.Sexp_apply (s, [ arg1; arg2 ], iter_attr) when is_and s.spexp_desc ->
+       ignore iter_attr;
       Eand (arg_expr arg1, arg_expr arg2)
-  | Uast.Sexp_apply (s, [ arg1; arg2 ]) when is_or s.spexp_desc ->
+  | Uast.Sexp_apply (s, [ arg1; arg2 ], iter_attr) when is_or s.spexp_desc ->
+       ignore iter_attr;
       Eor (arg_expr arg1, arg_expr arg2)
-  | Uast.Sexp_apply (s, [ arg ]) when is_not s.spexp_desc -> Enot (arg_expr arg)
-  | Uast.Sexp_apply (s, [ (_, arg) ]) when is_raise s.spexp_desc ->
+  | Uast.Sexp_apply (s, [ arg ], iter_attr) when is_not s.spexp_desc ->
+       ignore iter_attr;
+     Enot (arg_expr arg)
+  | Uast.Sexp_apply (s, [ (_, arg) ], iter_attr) when is_raise s.spexp_desc ->
+       ignore iter_attr;
       apply_raise info arg.spexp_desc
-  | Uast.Sexp_apply ({ spexp_desc = Sexp_ident s; _ }, arg_expr_list) ->
+  | Uast.Sexp_apply ({ spexp_desc = Sexp_ident _; _ }, _, iter_attr) when Option.is_some iter_attr ->
+      mk_iter (Option.get iter_attr)
+  | Uast.Sexp_apply ({ spexp_desc = Sexp_ident s; _ }, arg_expr_list, _) ->
       let id_loc = T.location s.loc in
       mk_eidapp (longident ~id_loc s.txt) (List.map arg_expr arg_expr_list)
-  | Uast.Sexp_apply (expr, arg_expr_list) ->
+  | Uast.Sexp_apply (expr, arg_expr_list, iter_attr) ->
+       ignore iter_attr;
       let mk_app acc (_, e) = mk_expr (Eapply (acc, expression info e)) in
       let e_acc = expression info expr in
       (List.fold_left mk_app e_acc arg_expr_list).expr_desc
