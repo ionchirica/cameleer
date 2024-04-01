@@ -26,12 +26,11 @@ let use_std_lib =
 
 let use_cursor_lib =
   let dummy_pos = Loc.dummy_position in
-  let stdlib = Qdot (Qident (T.mk_id "cursor"), T.mk_id "ListCursor") in
-  let use_stdlib =
-    Odecl.mk_duseimport dummy_pos ~import:false [ (stdlib, None) ]
+  let cursors = Qdot (Qident (T.mk_id "cursor"), T.mk_id "ListCursor") in
+  let use_cursorlib =
+    Odecl.mk_duseimport dummy_pos ~import:false [ (cursors, None) ]
   in
-  [ use_stdlib ]
-
+  [ use_cursorlib ]
 
 let mk_info () =
   let info = Odecl.empty_info () in

@@ -89,6 +89,9 @@ let mk_efun_visible binder_list pty spec expr =
 let mk_id n =
   T.mk_id n ~id_loc: Loc.dummy_position ~id_ats: []
 
+let id_anonymous loc = { id_str = "_"; id_ats = []; id_loc = loc }
+
+let re_pat pat d = { pat with pat_desc = d }
 let simplify_let_pattern ?loc kind d pat e =
 let cast e ty = { e with expr_desc = Ecast (e,ty) } in
 let rec unfold gh d p = match p.pat_desc with
@@ -96,8 +99,8 @@ let rec unfold gh d p = match p.pat_desc with
   | Pghost p -> unfold true d p
   | Pcast (p,ty) -> unfold gh (cast d ty) p
   | Pvar id -> Elet (id, gh, kind, d, e)
-  (* | Ptuple [] -> unfold gh (cast d (PTtuple [])) (re_pat p Pwild) *)
-  (* | Pwild -> Elet (id_anonymous p.pat_loc, gh, kind, d, e) *)
+  | Ptuple [] -> unfold gh (cast d (PTtuple [])) (re_pat p Pwild)
+  | Pwild -> Elet (id_anonymous p.pat_loc, gh, kind, d, e)
   | _ when kind = Expr.RKnone -> Ematch (d, [pat, e], [])
   | _ -> Loc.errorm ?loc "illegal kind qualifier" in
 unfold false d pat
@@ -147,7 +150,6 @@ let rec longident ?(id_loc = T.dummy_loc) ?(prefix = "") = function
   | _ -> assert false
 (* TODO *)
 
-
 let mk_iter (iter_attr: Uast.iter_attr) =
   let f, c, inv = iter_attr.iter_spec in
 
@@ -157,38 +159,55 @@ let mk_iter (iter_attr: Uast.iter_attr) =
   let tv = mk_id "type_variant"  in
   let x = mk_id "x"  in
   let mkt d = T.mk_term ~term_loc: Loc.dummy_position d in
-  let mk d = mk_expr ~expr_loc: Loc.dummy_position d in
+  let mk ?(loc=Loc.dummy_position) d = mk_expr ~expr_loc: loc d in
   let lcursor = mk_id "ListCursor"  in
-  let inv = Tapply(T.term false inv, T.mk_term ~term_loc: Loc.dummy_position Ttrue) in
 
-  (* variant { it.type_variant }*)
-  let var = T.mk_term ~term_loc: Loc.dummy_position
+  let field fst snd =
               (Tapply(
-                   T.mk_term ~term_loc: (Loc.user_position "c" 3 3 3 3) (Tident (Qident tv)),
-                   T.mk_term ~term_loc: (Loc.user_position "b" 2 2 2 2) (Tident (Qident it))
+                   T.mk_term ~term_loc: Loc.dummy_position (Tident (Qident fst)),
+                   T.mk_term ~term_loc: Loc.dummy_position (Tident (Qident snd))
               )) in
 
+  (* it.visited *)
+  let visited = field (mk_id "visited") it in
+  (* it.cursor_variant *)
+  let cursor_inv = field (mk_id "cursor_variant") it in
+
+  let inv = Tapply(T.term false inv, T.mk_term ~term_loc: Loc.dummy_position visited) in
+
+  (* variant { it.type_variant }*)
+  let var = T.mk_term ~term_loc: Loc.dummy_position (field (tv) (it)) in
+
   let q s = Qdot(Qident lcursor, mk_id s) in
+  (* it.next -> ListCursor.next it *)
   let next = mk (Eidapp ((q "next"), [mk (Eident (Qident (it)))])) in
-  let f = match f.spexp_desc with
+  (* it.has_next -> ListCursor.has_next it *)
+  let has_next = mk (Eidapp ((q "has_next"), [mk (Eident (Qident (it)))])) in
+
+  (* applying function parameter *)
+  let func = match f.spexp_desc with
     | Uast.Sexp_ident { txt; loc } ->
-      Eident (longident ~id_loc:(T.location loc) txt)
+      mk (Eident (longident ~id_loc:(T.location loc) txt))
     | _ -> assert false in
-  let c = match c.spexp_desc with
+  (* collection parameter *)
+  let collection = match c.spexp_desc with
     | Uast.Sexp_ident { txt; loc } ->
-      Eident (longident ~id_loc:(T.location loc) txt)
+      mk (Eident (longident ~id_loc:(T.location loc) txt))
     | _ -> assert false in
-  let c = mk c in
-  let f = mk f in
-  let x' = mk (Eident(Qident( x ))) in
-  let unit = mk_expr (Etuple []) ~expr_loc: (Loc.user_position "a" 1 1 1 1) in
-  let e = mk (Eapply(f, x')) in
-  let e = mk(simplify_let_pattern Expr.RKnone next (T.mk_pattern (Pvar (x))) e) in
+  (* produced element *)
+  let x' = mk (Eident(Qident(x))) in
+  let unit = mk_expr (Etuple []) ~expr_loc: Loc.dummy_position in
+  (* let _ = f x in *)
+  let e = mk (simplify_let_pattern Expr.RKnone (mk(Eapply(func, x'))) (T.mk_pattern Pwild) unit) in
+  (* let x = it.next in *)
+  let e = mk (simplify_let_pattern Expr.RKnone next (T.mk_pattern (Pvar (x))) e) in
   let e = { e with expr_desc = Eoptexn (id_c, Ity.MaskVisible, e) } in
-  let e = mk (Ewhile(mk Etrue, [mkt inv], [var, None], e )) in
+  (* while spec *)
+  let e = mk (Ewhile(has_next, [mkt inv; mkt cursor_inv], [var, None], e )) in
   let e = mk (Eoptexn(id_b, Ity.MaskVisible, e)) in
   let e = mk (Ematch (e, [], [q "Done", None, unit])) in
-  let create = mk(Eidapp(q "create", [c])) in
+  let create = mk (Eidapp(q "create", [collection])) in
+  (* let it = create collection in [e]*)
   Elet(it, false, Expr.RKnone, create, e)
 
 let rec core_type P.{ ptyp_desc; ptyp_loc; _ } =
