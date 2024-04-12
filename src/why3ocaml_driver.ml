@@ -17,6 +17,8 @@ let () =
   List.iter
     (fun (x, y) -> Hstr.add driver x y)
     [
+      ("list_cursor", "cursor");
+      ("tree_cursor", "cursor");
       ("integer", "int");
       ("int", "int");
       ("+", "infix +");

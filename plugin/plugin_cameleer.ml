@@ -3,7 +3,7 @@ open Ptree
 open Gospel
 open Parser_frontend
 
-let debug = ref false
+let debug = ref true
 
 open Why3.Typing
 open Wstdlib
@@ -26,15 +26,28 @@ let use_std_lib =
 
 let use_cursor_lib =
   let dummy_pos = Loc.dummy_position in
-  let cursors = Qdot (Qident (T.mk_id "cursor"), T.mk_id "ListCursor") in
+  let cursors = Qdot (Qident (T.mk_id "cursorlib"), T.mk_id "ListCursor") in
   let use_cursorlib =
     Odecl.mk_duseimport dummy_pos ~import:false [ (cursors, None) ]
   in
-  [ use_cursorlib ]
+  let tree = Qdot (Qident (T.mk_id "cursorlib"), T.mk_id "TreeCursor") in
+  let _use_treelib =
+    Odecl.mk_duseimport dummy_pos ~import:false [ (tree, None) ]
+  in
+  let sum = Qdot (Qident (T.mk_id "ocamlstdlib"), T.mk_id "Sum") in
+  let _use_sum =
+    Odecl.mk_duseimport dummy_pos ~import:false [ (sum, None) ]
+  in
+
+  [ [use_cursorlib]; [_use_sum] ]
 
 let mk_info () =
   let info = Odecl.empty_info () in
   Odecl.add_info info "Some" 1;
+  Odecl.add_info info "Node" 2;
+  Odecl.add_info info "E" 0;
+  Odecl.add_info info "empty" 0;
+  Odecl.add_info info "cons" 2;
   Odecl.add_info info "::" 2;
   info
 
@@ -57,7 +70,8 @@ let read_file filename nm c =
 
 let rec add_decl od =
   match od with
-  | Odecl.Odecl (loc, d) -> Why3.Typing.add_decl loc d
+  | Odecl.Odecl (loc, d) ->
+     Why3.Typing.add_decl loc d
   | Odecl.Omodule (loc, id, dl) ->
       Why3.Typing.open_scope id.id_loc id;
       List.iter add_decl dl;
@@ -180,8 +194,9 @@ let read_channel env path file c =
   (* This is the beginning of the top module construction *)
   let info = mk_info () in
   let f = Declaration.s_structure info f in
-  let f = use_cursor_lib @ f in
+  let f = List.fold_right (@) use_cursor_lib f in
   let f = use_std_lib @ f in
+
   let rec pp_list pp fmt l =
     match l with
     | [] -> ()
@@ -197,7 +212,8 @@ let read_channel env path file c =
         Format.eprintf "@[<hv 2>scope %s@\n%a@]@\nend@." id.id_str
           (pp_list pp_decl) dl
   in
-  if !debug then pp_list pp_decl Format.err_formatter f;
+  if !debug then
+    pp_list pp_decl Format.std_formatter f;
   List.iter add_decl f;
   close_module Loc.dummy_position;
   (* Closes the top module *)
@@ -207,6 +223,7 @@ let read_channel env path file c =
      let print_m _ m = Format.eprintf "%a@\n@." Pm.print_module m in
      let add_m _ m mm = Mid.add m.Pm.mod_theory.Theory.th_name m mm in
      Mid.iter print_m (Mstr.fold add_m mm Mid.empty));
+
   mm
 
 let () =

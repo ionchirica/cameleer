@@ -26,6 +26,7 @@ val mk_info_refinement :
 type info = private {
   info_arith_construct : (string, int) Hashtbl.t;
   info_refinement : (string, info_refinement) Hashtbl.t;
+  info_nesting : Ptree.term list;
 }
 
 val empty_info : unit -> info
@@ -38,6 +39,8 @@ val mk_dlogic :
 
 val mk_dprop :
   Loc.position -> Decl.prop_kind -> Ptree.ident -> Ptree.term -> odecl
+
+val add_nesting : info -> Ptree.term list -> info
 
 val mk_ind :
   Loc.position ->

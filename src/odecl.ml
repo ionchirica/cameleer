@@ -26,15 +26,20 @@ type info = {
   (* to be completed as needed *)
   info_arith_construct : (string, int) Hashtbl.t;
   info_refinement : (string, info_refinement) Hashtbl.t;
+  (* expression nesting level *)
+  info_nesting : term list;
 }
 
 let empty_info () =
   {
     info_arith_construct = Hashtbl.create 32;
     info_refinement = Hashtbl.create 32;
+    info_nesting = []
   }
 
 let add_info info id arith = Hashtbl.add info.info_arith_construct id arith
+
+let add_nesting info t = { info with info_nesting = t @ info.info_nesting }
 
 let add_info_refinement info id info_refinement =
   Hashtbl.add info.info_refinement id info_refinement

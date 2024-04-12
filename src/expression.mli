@@ -22,3 +22,5 @@ val exception_constructor :
   P.extension_constructor -> Ptree.ident * Ptree.pty * Ity.mask
 
 val s_value_binding : info -> Uast.s_value_binding -> Ptree.ident * Ptree.expr
+
+val expression_desc : info -> Why3.Loc.position -> Uast.s_expression_desc -> Ptree.expr_desc
