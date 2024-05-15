@@ -1,5 +1,5 @@
 (executable
- (libraries gospel why3 cameleer)
+ (libraries gospel why3 cameleer conf)
  (name cli)
  (public_name cameleer)
  (package cameleer))

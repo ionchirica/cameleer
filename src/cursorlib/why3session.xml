@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE why3session PUBLIC "-//Why3//proof session v5//EN"
+"http://why3.lri.fr/why3session.dtd">
+<why3session shape_version="6">
+<prover id="0" name="CVC4" version="1.7" timelimit="1" steplimit="0" memlimit="1000"/>
+<prover id="1" name="Alt-Ergo" version="2.5.2" timelimit="5" steplimit="0" memlimit="1000"/>
+<file format="whyml" proved="true">
+<path name=".."/><path name="cursorlib.mlw"/>
+<theory name="TreeCursor" proved="true">
+ <goal name="fold_tree&#39;vc" expl="VC for fold_tree" proved="true">
+ <proof prover="0"><result status="valid" time="0.056396" steps="13006"/></proof>
+ </goal>
+ <goal name="fold_forest&#39;vc" expl="VC for fold_forest" proved="true">
+ <proof prover="0" obsolete="true"><result status="valid" time="0.079303" steps="15460"/></proof>
+ <proof prover="1"><result status="valid" time="0.032912" steps="31"/></proof>
+ </goal>
+ <goal name="permitted_empty" proved="true">
+ <proof prover="0"><result status="valid" time="0.061533" steps="15222"/></proof>
+ </goal>
+ <goal name="next&#39;refn&#39;vc" expl="VC for next&#39;refn" proved="true">
+ <proof prover="0"><result status="valid" time="0.088072" steps="20919"/></proof>
+ </goal>
+</theory>
+<theory name="ListCursor" proved="true">
+ <goal name="permitted_empty" proved="true">
+ <proof prover="0"><result status="valid" time="0.089153" steps="13604"/></proof>
+ </goal>
+</theory>
+<theory name="ArrayCursor" proved="true">
+ <goal name="permitted_empty" proved="true">
+ <proof prover="0"><result status="valid" time="0.080570" steps="15318"/></proof>
+ </goal>
+</theory>
+<theory name="SetCursor" proved="true">
+ <goal name="eq&#39;refn&#39;vc" expl="VC for eq&#39;refn" proved="true">
+ <proof prover="0"><result status="valid" time="0.034799" steps="5711"/></proof>
+ </goal>
+ <goal name="t&#39;vc" expl="VC for t" proved="true">
+ <proof prover="0"><result status="valid" time="0.077563" steps="7193"/></proof>
+ </goal>
+</theory>
+<theory name="VertexSetCursor" proved="true">
+ <goal name="t&#39;vc" expl="VC for t" proved="true">
+ <proof prover="0"><result status="valid" time="0.059038" steps="8544"/></proof>
+ </goal>
+ <goal name="t&#39;refn&#39;vc" expl="VC for t" proved="true">
+ <proof prover="0"><result status="valid" time="0.078080" steps="7384"/></proof>
+ </goal>
+</theory>
+<theory name="SuccSetCursor" proved="true">
+ <goal name="t&#39;vc" expl="VC for t" proved="true">
+ <proof prover="0"><result status="valid" time="0.063073" steps="8586"/></proof>
+ </goal>
+ <goal name="t&#39;refn&#39;vc" expl="VC for t" proved="true">
+ <proof prover="0"><result status="valid" time="0.042119" steps="7423"/></proof>
+ </goal>
+</theory>
+<theory name="PredSetCursor" proved="true">
+ <goal name="t&#39;vc" expl="VC for t" proved="true">
+ <proof prover="0"><result status="valid" time="0.064256" steps="8601"/></proof>
+ </goal>
+ <goal name="t&#39;refn&#39;vc" expl="VC for t" proved="true">
+ <proof prover="0"><result status="valid" time="0.046090" steps="7424"/></proof>
+ </goal>
+</theory>
+</file>
+</why3session>

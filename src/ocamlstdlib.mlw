@@ -240,6 +240,19 @@ module Stdlib
 
     function of_list (l: list 'a) : set 'a = elements l
 
+    use import seq.ToFset as SF
+
+    function of_seq (s: seq 'a)  : set 'a = SF.to_set s
+
+    function inter (s1 s2: fset 'a): fset 'a
+    axiom inter_def: forall s1 s2: fset 'a, x: 'a. mem x (inter s1 s2) <-> mem x s1 /\ mem x s2
+
+
+    function remove (x: 'a) (s: fset 'a) : fset 'a
+    axiom remove_def: forall x: 'a, s: fset 'a, y: 'a. mem y (remove x s) <-> (mem y s /\ y <> x)
+
+
+
   end
 
   scope Power
@@ -327,6 +340,20 @@ module Stdlib
 
     val function compare (x y: t) : int
     axiom compare_pre_order : is_pre_order compare
+
+  end
+
+  scope Power
+    use export int.Power
+  end
+
+  scope Seq
+
+    use export seq.Seq
+    use export seq.Mem
+    use export seq.Distinct
+    use export seq.Reverse
+    use export seq.OfList
 
   end
 

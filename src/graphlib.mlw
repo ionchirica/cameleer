@@ -1,0 +1,65 @@
+module Graph
+  use map.Map
+  use set.Fset
+
+  type elt
+  type graph = abstract {
+    dom: fset elt;
+    succ: elt -> fset elt;
+    pred: elt -> fset elt;
+  }
+  invariant { forall v1 v2. mem v1 dom -> mem v2 (succ v1) -> mem v2 dom }
+  invariant { forall v1. not (mem v1 dom) -> succ v1 == Fset.empty }
+  by { dom = Fset.empty; succ = (fun _ -> Fset.empty); pred = (fun _ -> Fset.empty) }
+
+  val graphempty () : (g: graph)
+  ensures { g.dom = empty }
+  ensures { g.succ = (fun _ -> empty) }
+  ensures { g.pred = (fun _ -> empty) }
+
+  val create_singleton (v: elt): (g: graph)
+  ensures { g.dom = Fset.singleton v }
+
+  val constant vv: elt
+  val create_singleton_pair (v: elt) (v': elt): (g: graph)
+  ensures { g.dom = Fset.singleton v /\ g.dom = Fset.add v' g.dom  }
+
+  type gvpair = abstract{
+    g: graph;
+    v: elt;
+  }
+  invariant { mem v g.dom }
+  by { g = create_singleton (vv) ; v = vv }
+
+  val gvpair (g: graph) (v: elt) : gvpair
+  ensures { result.g = g }
+  ensures { result.v = v }
+
+  val emptygvpair () : gvpair
+  ensures { result.g.dom = empty }
+  ensures { result.g.succ = (fun _ -> Fset.empty) }
+  ensures { result.v = vv }
+
+  val function mem_vertex (g: graph) (v: elt) : bool
+  ensures { result <-> mem v g.dom }
+
+  val function mem_edge (g: graph) (src: elt) (dst:elt): bool
+  ensures { result <-> (mem dst (g.succ src))}
+
+  val add_vertex (ref g: graph) (x: elt) : ()
+  writes { g }
+  ensures { g.dom == add x (old g.dom) }
+  ensures { forall s: elt. g.succ s == (old g.succ) s }
+  ensures { forall s: elt. g.pred s == (old g).pred s }  (* unchanged predecessors *)
+
+  val add_edge (ref g: graph) (src: elt) (dst: elt) : ()
+  writes { g }
+  ensures { g.dom == old g.dom }
+  ensures { g.succ = Map.set (old g.succ) src (add dst (old g.succ src) ) }
+
+  (* use [g] and set the successors of [g'] [src] : return [graph] *)
+  val copy_edges (ref g:graph) (g': graph) (src: elt) : ()
+  ensures { g.dom == g.dom }
+  ensures { g.succ = Map.set g.succ src ( g'.succ src ) }
+  ensures { g.pred = Map.set g.pred src ( g'.pred src ) }
+end

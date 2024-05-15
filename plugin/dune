@@ -1,9 +1,9 @@
 (executable
- (libraries ppxlib gospel why3 cameleer pp_loc)
+ (libraries ppxlib gospel why3 conf cameleer pp_loc)
  (name plugin_cameleer)
  (modes plugin)
  (embed_in_plugin_libraries compiler-libs.common ocaml-compiler-libs.shadow
-   ppxlib.astlib ppxlib.stdppx ppxlib.ast ppxlib fmt pp_loc gospel cameleer))
+   ppxlib.astlib ppxlib.stdppx ppxlib.ast ppxlib fmt pp_loc gospel cameleer conf))
 
 (install
  (section lib_root)

@@ -26,6 +26,7 @@ val mk_info_refinement :
 type info = private {
   info_arith_construct : (string, int) Hashtbl.t;
   info_refinement : (string, info_refinement) Hashtbl.t;
+  info_iter_argument : (string, int) Hashtbl.t;
   info_nesting : Ptree.term list;
 }
 
@@ -40,6 +41,7 @@ val mk_dlogic :
 val mk_dprop :
   Loc.position -> Decl.prop_kind -> Ptree.ident -> Ptree.term -> odecl
 
+val add_iter_argument: info -> (string * int) -> unit
 val add_nesting : info -> Ptree.term list -> info
 
 val mk_ind :
@@ -66,3 +68,12 @@ val mk_functor :
 
 val mk_cloneexport :
   ?odecl_loc:Loc.position -> Ptree.qualid -> Ptree.clone_subst list -> odecl
+
+module Iteration : sig
+  open Gospel
+  val args : Uast.iter_arg_type Gospel.Utils.Hstr.t
+  val populate_map: (string option * Uast.iter_arg_type) list -> unit
+  val get_term: string -> Uast.term
+  val get_pty: string -> Uast.pty
+  val get_term_opt: string -> Uast.iter_arg_type option
+end

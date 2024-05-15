@@ -2,17 +2,52 @@
 <!DOCTYPE why3session PUBLIC "-//Why3//proof session v5//EN"
 "http://why3.lri.fr/why3session.dtd">
 <why3session shape_version="6">
-<prover id="0" name="Z3" version="4.8.6" timelimit="1" steplimit="0" memlimit="1000"/>
-<prover id="1" name="CVC4" version="1.7" timelimit="1" steplimit="0" memlimit="1000"/>
 <file format="whyml">
 <path name=".."/><path name="ocamlstdlib.mlw"/>
-<theory name="OCamlStdLib">
+<theory name="Stdlib">
  <goal name="cmp_eq">
- <proof prover="0"><undone/></proof>
- <proof prover="1"><result status="unknown" time="0.10" steps="18194"/></proof>
  </goal>
- <goal name="List.find_all&#39;vc" expl="VC for find_all" proved="true">
- <proof prover="1"><result status="valid" time="0.03" steps="11316"/></proof>
+ <goal name="Array.my_array&#39;vc" expl="VC for my_array">
+ </goal>
+ <goal name="Array.init&#39;vc" expl="VC for init">
+ </goal>
+ <goal name="Array.blit&#39;vc" expl="VC for blit">
+ </goal>
+ <goal name="Array.to_list_range&#39;vc" expl="VC for to_list_range">
+ </goal>
+ <goal name="Array.to_list_append&#39;vc" expl="VC for to_list_append">
+ </goal>
+ <goal name="Array.to_list&#39;vc" expl="VC for to_list">
+ </goal>
+ <goal name="List.find_all&#39;vc" expl="VC for find_all">
+ </goal>
+</theory>
+<theory name="Hashtbl_Make">
+ <goal name="t&#39;vc" expl="VC for t">
+ </goal>
+</theory>
+<theory name="Map_Make">
+ <goal name="empty&#39;vc" expl="VC for empty">
+ </goal>
+</theory>
+<theory name="Set_Make">
+ <goal name="empty&#39;vc" expl="VC for empty">
+ </goal>
+</theory>
+<theory name="Map">
+ <goal name="Make.empty&#39;vc" expl="VC for empty">
+ </goal>
+</theory>
+<theory name="Array">
+ <goal name="my_array&#39;vc" expl="VC for my_array">
+ </goal>
+ <goal name="init&#39;vc" expl="VC for init">
+ </goal>
+ <goal name="to_list_range&#39;vc" expl="VC for to_list_range">
+ </goal>
+ <goal name="to_list_append&#39;vc" expl="VC for to_list_append">
+ </goal>
+ <goal name="to_list&#39;vc" expl="VC for to_list">
  </goal>
 </theory>
 </file>

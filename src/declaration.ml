@@ -5,6 +5,7 @@ open Parsetree
 open Why3
 open Ptree
 open Vspec
+open Odecl.Iteration
 module T = Uterm
 module Tt = Tterm
 module E = Expression
@@ -350,6 +351,111 @@ let mk_import_name_list popen_lid =
   let fname = Qident id_fname in
   (fname, mname)
 
+let get_acc_from_header (spec: Uast.val_spec) (pty: Uast.pty) =
+  let header = Option.get spec.sp_header in
+  let args = header.sp_hd_args in
+  let hd_name = Identifier.Preid.get_str header.sp_hd_nm in
+  let name =
+    match pty with
+    | PTtyvar v -> Identifier.Preid.get_str v
+    | PTtyapp (c, _) ->
+       (match c with
+        | Qpreid q -> Identifier.Preid.get_str q
+        | _ -> assert false)
+    | _ -> assert false in
+  (* labelled_arg list to label list *)
+  let args = List.map (fun arg ->
+                 let id = (match (arg: Uast.labelled_arg) with
+                 | Lnone pid -> pid
+                 | Loptional pid -> pid
+                 | Lnamed pid -> pid
+                 | Lghost (pid, _) -> pid
+                 | Lunit -> assert false) in
+                 Identifier.Preid.get_str id
+                 ) args in
+  (* ripped from 5.1 OCaml Stdlib *)
+  let find_index p =
+    let rec aux i = function
+        [] -> None
+      | a::l -> if p a then Some i else aux (i+1) l in
+    aux 0 in
+  (* if this function is even called, it's safe to say that one must exist *)
+  (hd_name, Option.get (find_index ( (=) name ) args))
+
+let mk_cursor info (sval: Uast.s_val_description) =
+  let cursor_id = T.mk_id "Cursor" in
+  let cursor_lib = Qdot(Qident(T.mk_id "cursorlib"), cursor_id) in
+  let seq_lib = Qdot(Qident(T.mk_id "seq"), T.mk_id "Seq") in
+  let use_cursor = O.mk_odecl Loc.dummy_position (Duseimport
+                                                    (Loc.dummy_position,
+                                                     false,
+                                                     [(seq_lib, None); (cursor_lib, None)]
+                     )) in
+  let spec = Option.get sval.vspec in
+  let iter_spec = spec.sp_iter in
+  let iter_spec = (Option.get iter_spec) in
+  populate_map iter_spec.iter_args;
+
+  let permitted = get_term "permitted" in
+  let complete = get_term "complete" in
+
+  let elt = get_pty "elt" in
+  let structure = get_pty "structure" in
+  let collection = get_pty "collection" in
+  let accumulator = get_pty "accumulator" in
+  let accumulator = get_acc_from_header spec accumulator in
+  O.add_iter_argument info accumulator;
+
+  let collection =
+    match collection with
+    | PTtyvar c -> Identifier.Preid.get_str c
+    | PTtyapp (c, _) ->
+       (match c with
+       | Qpreid q -> Identifier.Preid.get_str q
+       | _ -> assert false)
+    | _ -> assert false in
+
+  let create_param = (Loc.dummy_position,
+                      Some (T.mk_id collection),
+                      false,
+                      (Uterm.pty structure)
+                     ) in
+  let result_pat = {pat_desc = Pvar(T.mk_id "result"); pat_loc = Loc.dummy_position } in
+  let result = T.mk_pattern ((Pvar(T.mk_id ("result")))) in
+  let create_spec = empty_spec in
+
+  let res f t =
+    T.mk_term (Tinfix((T.mk_term (Tidapp(Qident(T.mk_id f), [T.mk_term(Tident(Qident(T.mk_id "result")))])),
+                       (T.mk_id "infix ="),
+                       t))) in
+
+  let visited_empty = T.mk_term (Tident(Qident(T.mk_id "empty"))) in
+  let create_post = [
+      (Loc.dummy_position, [result, res "visited" visited_empty]);
+      (Loc.dummy_position, [result, res "permitted" (T.term false permitted)]);
+      (Loc.dummy_position, [result, res "complete" (T.term false complete)]);
+    ] in
+  let create_spec = { create_spec with sp_post = create_post } in
+
+  let cursor_result = PTtyapp(Qident(T.mk_id "cursor"), [Uterm.pty elt]) in
+  let create_expr = E.mk_expr (Eany
+                                 ([create_param],
+                                  Expr.RKnone,
+                                  Some(cursor_result),
+                                  result_pat,
+                                  Ity.MaskVisible,
+                                  create_spec)) in
+
+  let create = O.mk_odecl Loc.dummy_position
+                 (Dlet ((T.mk_id "create"), false, Expr.RKnone, create_expr)) in
+  let clone = O.mk_odecl Loc.dummy_position (Dcloneexport(
+                                                 Loc.dummy_position,
+                                                 cursor_lib,
+                                                 []
+
+                )) in
+  O.mk_omodule Loc.dummy_position (T.mk_id (String.capitalize_ascii sval.vname.txt)) [use_cursor; create; clone]
+
 open Mod_subst
 
 (* TO BE USED *)
@@ -418,7 +524,14 @@ let s_structure, s_signature =
   and s_signature_item info Uast.{ sdesc; sloc } =
     s_signature_item_desc info (T.location sloc) sdesc
   and s_signature_item_desc info loc sig_item_desc =
+
     match sig_item_desc with
+    | Sig_val ({vname = x; _} as s_val) when
+           (String.starts_with ~prefix:"iter" x.txt ||
+           String.starts_with ~prefix:"fold" x.txt) &&
+           Option.is_some s_val.vspec
+      ->
+        [ mk_cursor info s_val ]
     | Sig_val s_val ->
         let ghost = E.is_ghost s_val.vattributes in
         [ val_decl loc s_val ghost ]
@@ -481,7 +594,7 @@ let s_structure, s_signature =
     | Sig_modsubst _ -> assert false (* TODO *)
   and s_structure_item info Uast.{ sstr_desc; sstr_loc } =
     s_structure_item_desc info (T.location sstr_loc) sstr_desc
-  and s_structure_item_desc info loc str_item_desc =
+  and s_structure_item_desc (info: Odecl.info) loc str_item_desc =
     let is_const_svb Uast.{ spvb_expr; _ } =
       match spvb_expr.spexp_desc with
       | Sexp_function _ | Sexp_fun _ -> false
@@ -582,8 +695,8 @@ let s_structure, s_signature =
       | Uast.Smod_functor ({ txt = Some arg_name; loc }, arg, body) ->
           let id_loc = T.location loc in
           let id = T.mk_id ~id_loc arg_name in
-          let body = s_module_expr body in
           let arg, subst_arg = s_module_type info (Option.get arg) in
+          let body = s_module_expr body in
           ignore subst_arg;
           (* TODO *)
           O.mk_functor decl_loc id arg body
@@ -694,7 +807,8 @@ let s_structure, s_signature =
         let s = E.string_of_longident id.txt in
         try (Hashtbl.find mod_type_table s, empty_subst)
         with Not_found -> assert false)
-    | Mod_signature s_sig -> (s_signature info s_sig, empty_subst)
+    | Mod_signature s_sig ->
+       (s_signature info s_sig, empty_subst)
     | Mod_functor (Unit, _) -> assert false (* TODO *)
     | Mod_functor (Named ({ txt = None; _ }, _), _) -> assert false (* TODO *)
     | Mod_functor (Named ({ txt = Some arg_name; loc }, arg), body) ->

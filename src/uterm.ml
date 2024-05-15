@@ -33,7 +33,7 @@ let binder_of_pattern ppat_desc ppat_loc ppat_attributes =
   in
   match ppat_desc with
   | Uast.Pwild ->
-      let id = mk_id "us" ~id_loc:(location ppat_loc) in
+      let id = mk_id "_us" ~id_loc:(location ppat_loc) in
       binder id ppat_loc ppat_attributes None
   | Pvar x ->
       let id = mk_id x.pid_str ~id_loc:(location x.pid_loc) in

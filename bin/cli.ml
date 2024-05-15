@@ -2,6 +2,7 @@ open Format
 
 let fname = ref None
 let debug = ref false
+let parse_only = ref false
 let batch = ref false
 let extract = ref false
 let prover = ref None
@@ -15,6 +16,7 @@ let spec =
       "add <dir> to the search path" );
     ("--debug", Arg.Unit (fun () -> debug := true), "print debug information");
     ("--batch", Arg.Unit (fun () -> batch := true), "activate batch mode");
+    ("--parse-only", Arg.Unit (fun () -> parse_only := true), "stop after parsing");
     ( "--extract",
       Arg.Unit (fun () -> extract := true),
       "activate extraction mode" );
@@ -45,6 +47,9 @@ let fname = match !fname with None -> usage () | Some f -> f
 let debug = if !debug then "--debug=print_modules" else ""
 let path = Queue.fold (fun acc s -> sprintf "-L %s %s" s acc) "" path
 
+let execute_pp fname path =
+  Sys.command (sprintf "why3 --debug=parse_only pp %s %s" fname path)
+
 let execute_ide fname path debug =
   Sys.command (sprintf "why3 ide %s %s %s" fname path debug)
 
@@ -59,7 +64,9 @@ let batch = !batch
 let extract = !extract
 
 let _ =
-  if batch then
+  if !parse_only then
+    exit(execute_pp fname path)
+  else if batch then
     let p = match !prover with None -> usage () | Some s -> s in
     exit (execute_batch fname path debug p)
   else if extract then exit (execute_extract fname)

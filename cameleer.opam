@@ -34,3 +34,6 @@ depends: [
 conflicts: [
   "lablgtk" {< "2.14.2"}
 ]
+pin-depends: [
+  "gospel.dev" "git+https://github.com/ocaml-gospel/gospel.git#2e928ead075e9b281544adad063c992f97cfaa02"
+]

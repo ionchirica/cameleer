@@ -5,5 +5,8 @@
 (install
  (section share_root)
  (files
-  (ocamlstdlib.mlw as why3/stdlib/ocamlstdlib.mlw))
+  (ocamlstdlib.mlw as why3/stdlib/ocamlstdlib.mlw)
+  (cursorlib.mlw as why3/stdlib/cursorlib.mlw)
+  (graphlib.mlw as why3/stdlib/graphlib.mlw)
+  )
  (package cameleer))

@@ -1,0 +1,319 @@
+module Cursor
+
+  use seq.Seq
+
+  type cursor 'a = private {
+    ghost mutable visited : seq 'a;
+    permitted : seq 'a -> bool;
+    complete : seq 'a -> bool;
+  } invariant { permitted visited }
+  by { visited = empty ;
+       permitted = ( fun _ -> true );
+       complete = ( fun _ -> true ); }
+
+  axiom permitted_empty: forall c: cursor 'a. c.visited = empty -> c.permitted c.visited
+
+  val next (c: cursor 'a) : 'a
+    requires { not (c.complete c.visited) }
+    writes   { c.visited }
+    ensures  { c.visited = snoc (old c).visited result }
+
+  val has_next (c: cursor 'a) : bool
+    requires { c.permitted c.visited }
+    ensures  { result <-> not (c.complete c.visited) }
+
+end
+module CursorOld
+
+  use seq.Seq
+
+  type cursor 'a = private {
+    ghost mutable visited : seq 'a;
+  }
+
+  predicate permitted (cursor 'a)
+  axiom permitted_empty: forall c: cursor 'a. c.visited = empty -> permitted c
+
+  predicate complete  (cursor 'a)
+
+
+  val next (c: cursor 'a) : 'a
+    requires { not (complete c) }
+    requires { permitted c }
+    writes   { c.visited }
+    ensures  { c.visited = snoc (old c).visited result }
+    ensures  { permitted c }
+
+  val has_next (c: cursor 'a) : bool
+    requires { permitted c }
+    ensures  { result <-> not (complete c) }
+
+end
+
+
+(* module Fold_vertex *)
+(*   use Cursor *)
+(*   use set.Fset *)
+(*   use graphlib.Graph *)
+(*   use seq.ToFset *)
+
+(*   val create (s: graph) : t 'a *)
+(*     ensures { result.visited = empty } *)
+(*     ensures { result.permitted = (fun v -> subset (to_set visited) s.dom ) } *)
+(*     ensures { result.complete  = (fun v -> cardinal (to_set visited) <> cardinal s.dom ) } *)
+
+(*   function cursor_variant (c:cursor) (s: graph 'a) = cardinal s.dom - length c.visited *)
+
+(*   clone export CursorOld *)
+(* end *)
+
+module TreeCursor
+  use list.List
+  use ref.Ref
+  use int.Int
+  use seq.Seq
+  use seq.Mem as SM
+  use seq.OfList
+
+  type tree  'a = E | Node 'a (forest 'a)
+  with forest 'a = list (tree 'a)
+
+  type cursor 'a = private {
+    ghost mutable  visited : seq 'a;
+    ghost mutable elements : seq 'a;
+                collection : tree 'a;
+  }
+
+  let rec function elements_tree (t: tree 'a) (acc: seq 'a) : seq 'a =
+     variant { t }
+     match t with
+      | E -> acc
+      | Node e r -> elements_forest r (cons e acc)
+     end
+  with elements_forest (f: forest 'a) (acc: seq 'a) : seq 'a =
+    variant { f }
+    match f with
+     | Nil -> acc
+     | Cons x r ->
+       let children = (elements_tree x acc) ++ acc in
+       elements_forest r children
+    end
+
+  predicate permitted (c: cursor 'a) =
+    forall e. SM.mem e c.visited  -> SM.mem e c.elements
+
+  predicate complete (c: cursor 'a) =
+    length c.elements = length c.visited
+
+  val create (c: tree 'a) : cursor 'a
+    ensures { result.collection = c }
+    ensures { result.visited = empty}
+    ensures { result.elements = elements_tree c empty }
+
+
+  val next (c: cursor 'a) : 'a
+    requires { not (complete c) }
+    requires { permitted c }
+    writes   { c.visited }
+    ensures  { c.visited = cons result (old c).visited }
+    ensures  { permitted c }
+    ensures  { result = c.elements[length c.visited] }
+
+   function type_variant ( t: cursor 'a ) : int = length t.elements - length t.visited
+
+  clone export CursorOld with
+    type cursor = cursor,
+    predicate complete,
+    predicate permitted,
+    val next,
+    goal permitted_empty
+
+end
+
+module ListCursor
+  use seq.Seq
+  use seq.OfList
+  use list.List
+  use int.Int
+
+  type cursor 'a = private {
+    ghost mutable visited    : seq 'a;
+    ghost         collection : list 'a;
+  }
+
+  predicate permitted (c: cursor 'a) =
+    length c.visited <= length c.collection /\
+    forall i. 0 <= i < length c.visited -> c.visited[i] = c.collection[i]
+
+  predicate complete  (c: cursor 'a) =
+    length c.visited = length c.collection
+
+  val function create (l: list 'a) : cursor 'a
+    ensures { permitted result }
+    ensures { result.visited = empty }
+    ensures { result.collection = l }
+
+  function type_variant ( t: cursor 'a ) : int = length t.collection - length t.visited
+
+  clone export CursorOld with
+    type cursor = cursor,
+    predicate permitted = permitted,
+    predicate complete  = complete,
+    goal permitted_empty
+
+end
+
+module ArrayCursor
+
+  use array.Array
+  use array.ToSeq
+  use seq.Seq
+  use seq.OfList
+  use int.Int
+
+  type cursor 'a = private {
+    ghost mutable visited    : seq 'a;
+    ghost         collection : seq 'a;
+  }
+
+  predicate permitted (c: cursor 'a) =
+    length c.visited <= length c.collection /\
+    forall i. 0 <= i < length c.visited -> c.visited[i] = c.collection[i]
+
+  predicate complete  (c: cursor 'a) =
+    length c.visited = length c.collection
+
+  val create (a: array 'a) : cursor 'a
+    ensures { permitted result }
+    ensures { result.visited = empty }
+    ensures { result.collection = to_seq a }
+
+  clone export CursorOld with
+    type cursor = cursor,
+    predicate permitted = permitted,
+    predicate complete  = complete,
+    goal permitted_empty
+
+end
+
+module SetCursor
+  use set.Fset
+  use int.Int
+  use graphlib.Graph
+  val eq_elt (x y: 'a) : bool
+    ensures { result <-> x = y }
+  clone export set.SetApp with val eq = eq_elt
+
+  predicate subcollection (v: fset 'a) (c: fset 'a) = subset v c
+  predicate equalcollection (v: fset 'a) (c: fset 'a) =  v == c
+
+  val emptyset () : fset 'a       (* used to prove t's type invariant *)
+    ensures { result = Fset.empty }
+
+  type t 'a = private {
+    mutable visited : fset 'a;
+            collection : fset 'a;
+  } invariant { subcollection visited collection }
+  by { visited = emptyset(); collection = emptyset() }
+
+  val has_next(t: t 'a) : bool
+    ensures { result <-> cardinal t.visited <> cardinal t.collection }
+
+  predicate permitted (t: t 'a) = subset t.visited t.collection
+
+  val next (t: t 'a) : 'a
+    writes  { t }
+    ensures { not mem result (old t.visited) }
+    ensures { t.visited = add result (old t.visited) }
+
+  function type_variant ( t: t 'a) : int = (cardinal t.collection) - (cardinal t.visited)
+end
+
+(* module VertexCursor *)
+(*   use set.Fset *)
+(*   use graphlib.Graph *)
+(*   use SetCursor *)
+
+(*   type t 'a = private { *)
+(*     mutable visited : fset 'a; *)
+(*             collection : fset 'a; *)
+(*   } *)
+(*   invariant { subcollection visited collection } *)
+(*   by { visited = SetCursor.emptyset(); collection = SetCursor.emptyset() } *)
+
+(*   val create (s: fset 'a) : t 'a *)
+(*     ensures { result.visited = empty } *)
+(*     ensures { result.collection = s } *)
+
+(*   clone export SetCursor with type t = t *)
+(* end *)
+
+(* module VertexSetCursor *)
+(*   use set.Fset *)
+(*   use graphlib.Graph *)
+(*   use SetCursor *)
+
+(*   type t 'a = private { *)
+(*     mutable visited : fset 'a; *)
+(*             graph : graph; *)
+(*             collection : fset 'a; *)
+(*   } *)
+(*   invariant { subcollection visited collection } *)
+(*   invariant { collection == graph.dom } *)
+(*   by { visited = SetCursor.emptyset(); collection = SetCursor.emptyset(); graph = graphempty() } *)
+
+(*   val create (s: graph) : t *)
+(*     ensures { result.visited = empty } *)
+(*     ensures { result.graph = s } *)
+
+(*   clone export SetCursor with type t = t *)
+(* end *)
+
+(* module SuccSetCursor *)
+(*   use set.Fset *)
+(*   use graphlib.Graph *)
+(*   use SetCursor *)
+
+(*   type t 'a = private { *)
+(*     mutable visited : fset 'a; *)
+(*             graph : gvpair; *)
+(*             collection : fset 'a; *)
+(*   } *)
+(*   invariant { subcollection visited collection } *)
+(*   invariant { collection == graph.g.succ graph.v } *)
+(*   by { visited = SetCursor.emptyset(); collection = SetCursor.emptyset(); graph = emptygvpair() } *)
+
+(*   val create (s: gvpair) : t *)
+(*     ensures { result.visited = empty } *)
+(*     ensures { result.graph = s } *)
+
+(*   clone export SetCursor with type t = t *)
+(* end *)
+
+(* module PredSetCursor *)
+(*   use set.Fset *)
+(*   use graphlib.Graph *)
+(*   use SetCursor *)
+
+(*   type t 'a = private { *)
+(*     mutable visited : fset 'a; *)
+(*             graph : gvpair; *)
+(*             collection : fset 'a; *)
+(*   } *)
+(*   invariant { subcollection visited collection } *)
+(*   invariant { collection == graph.g.pred graph.v } *)
+(*   by { visited = SetCursor.emptyset(); collection = SetCursor.emptyset(); graph = emptygvpair() } *)
+
+(*   val create (s: gvpair) : t *)
+(*     ensures { result.visited = empty } *)
+(*     ensures { result.graph = s } *)
+
+(*   clone export SetCursor with type t = t *)
+(* end *)
+
+module Cursorlib
+  (* use Cursor *)
+  (* use ListCursor *)
+  (* use ArrayCursor *)
+  (* use TreeCursor *)
+end

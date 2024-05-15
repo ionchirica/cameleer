@@ -26,20 +26,29 @@ let use_std_lib =
 
 let use_cursor_lib =
   let dummy_pos = Loc.dummy_position in
-  let cursors = Qdot (Qident (T.mk_id "cursorlib"), T.mk_id "ListCursor") in
-  let use_cursorlib =
+  let cursors = Qdot (Qident (T.mk_id "cursorlib"), T.mk_id "Cursor") in
+  let _use_cursorlib =
     Odecl.mk_duseimport dummy_pos ~import:false [ (cursors, None) ]
   in
   let tree = Qdot (Qident (T.mk_id "cursorlib"), T.mk_id "TreeCursor") in
   let _use_treelib =
     Odecl.mk_duseimport dummy_pos ~import:false [ (tree, None) ]
   in
+  let vertex = Qdot (Qident (T.mk_id "cursorlib"), T.mk_id "VertexCursor") in
+  let _use_vertexlib =
+    Odecl.mk_duseimport dummy_pos ~import:true [ (vertex, None) ]
+  in
   let sum = Qdot (Qident (T.mk_id "ocamlstdlib"), T.mk_id "Sum") in
-  let _use_sum =
+  let use_sum =
     Odecl.mk_duseimport dummy_pos ~import:false [ (sum, None) ]
   in
+  let fset = Qdot (Qident (T.mk_id "set"), T.mk_id "Fset") in
+  let _use_fset =
+    Odecl.mk_duseimport dummy_pos ~import:false [ (fset, None) ]
+  in
 
-  [ [use_cursorlib]; [_use_sum] ]
+
+  [ [use_sum]; [_use_fset]; [_use_cursorlib] ]
 
 let mk_info () =
   let info = Odecl.empty_info () in
@@ -188,12 +197,14 @@ let read_channel env path file c =
   let f = read_file file mod_name c in
   (* let f = type_check file mod_name f in *)
   open_file env path;
+
   (* This is the beginning of the Why3 file construction *)
   let id = T.mk_id mod_name in
   open_module id;
   (* This is the beginning of the top module construction *)
   let info = mk_info () in
   let f = Declaration.s_structure info f in
+
   let f = List.fold_right (@) use_cursor_lib f in
   let f = use_std_lib @ f in
 
