@@ -51,6 +51,7 @@ let execute_pp fname path =
   Sys.command (sprintf "why3 --debug=parse_only pp %s %s" fname path)
 
 let execute_ide fname path debug =
+  (* Sys.command (sprintf "why3 --debug=stack_trace ide %s %s %s" fname path debug) *)
   Sys.command (sprintf "why3 ide %s %s %s" fname path debug)
 
 let execute_extract fname =

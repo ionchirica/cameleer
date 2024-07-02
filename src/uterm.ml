@@ -27,19 +27,6 @@ let mk_binder loc id ghost pty : Ptree.binder = (loc, id, ghost, pty)
 let is_ghost attributes =
   List.exists (fun P.{ attr_name; _ } -> attr_name.txt = "ghost") attributes
 
-let binder_of_pattern ppat_desc ppat_loc ppat_attributes =
-  let binder id pat_loc ghost_pat pty =
-    mk_binder (location pat_loc) (Some id) (is_ghost ghost_pat) pty
-  in
-  match ppat_desc with
-  | Uast.Pwild ->
-      let id = mk_id "_us" ~id_loc:(location ppat_loc) in
-      binder id ppat_loc ppat_attributes None
-  | Pvar x ->
-      let id = mk_id x.pid_str ~id_loc:(location x.pid_loc) in
-      binder id ppat_loc ppat_attributes None
-  | _ -> assert false
-
 let constant = function
   | P.Pconst_integer (s, _) ->
       if s.[0] = '-' then
@@ -110,6 +97,25 @@ let rec pattern Uast.{ pat_desc = p_desc; pat_loc } =
 
   mk_pat (pat_desc p_desc)
 
+
+let rec binder_of_pattern ppat_desc ppat_loc ppat_attributes =
+  let binder id pat_loc ghost_pat pty =
+    mk_binder (location pat_loc) (Some id) (is_ghost ghost_pat) pty
+  in
+  match ppat_desc with
+  | Uast.Pwild ->
+      let id = mk_id "_us" ~id_loc:(location ppat_loc) in
+      [ binder id ppat_loc ppat_attributes None ]
+  | Pvar x ->
+      let id = mk_id x.pid_str ~id_loc:(location x.pid_loc) in
+       [ binder id ppat_loc ppat_attributes None ]
+  | Ptuple list ->
+        let pat_list = List.map (fun (p: Uast.pattern) -> p.pat_desc) list in
+        let pat_list = List.map (fun p -> binder_of_pattern p ppat_loc ppat_attributes) pat_list in
+        List.flatten pat_list
+  | _ -> assert false
+
+
 let binder (id, ty) =
   (location id.Preid.pid_loc, Some (preid id), false, Option.map pty ty)
 
@@ -161,9 +167,9 @@ let rec term in_post Uast.{ term_desc = t_desc; term_loc } =
     | Uast.Tlambda (pt, t, _) ->
         Tquant
           ( D.DTlambda,
-            List.map
-              (fun p -> binder_of_pattern p.Uast.pat_desc p.Uast.pat_loc [])
-              pt,
+            List.flatten (List.map
+                            (fun p -> binder_of_pattern p.Uast.pat_desc p.Uast.pat_loc [])
+                            pt),
             [],
             term in_post t )
   in

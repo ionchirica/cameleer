@@ -21,6 +21,7 @@ let rec qualid_of_longident_mod = function
   | _ -> assert false
 
 
+
 (* TO BE USED : *)
 (* let rec_flag = function Nonrecursive -> false | Recursive -> true *)
 
@@ -68,6 +69,10 @@ let mk_pas ?(ghost = false) pat id = Pas (pat, id, ghost)
 (** Smart constructors for Ptree expressions *)
 
 let mk_expr ?(expr_loc = T.dummy_loc) expr_desc = { expr_desc; expr_loc }
+
+let aform name value e = mk_expr (Elet(name, false, Expr.RKnone, value, e))
+
+let aform_t name value t = T.mk_term ~term_loc:Loc.dummy_position (Tlet (name, value, t))
 
 let mk_fun_def ghost rs_kind (id, fun_expr) =
   let args, ret, spec, expr =
@@ -678,22 +683,20 @@ let rec expression_desc info expr_loc expr_desc =
   | Uast.Sexp_apply ({ spexp_desc = Sexp_ident iter_name; _ } as expr, args, iter_attr)
     when Option.is_some iter_attr ->
      let iter_attr = Option.get iter_attr in
-     let iter_attr = if iter_attr.is_fold then
-       ((* anonymous function, get function body from AST *)
-          let anon = extract_fun args in
-          let f = List.hd anon in
-          let args = List.tl anon in
-          let names, body = List.hd (List.map (fun x -> extract_args (snd x) []) [f]) in
-          { attr = iter_attr;
-            arg_names = names;
-            iter_name = iter_name;
-            body = Some body;
-            arg_values = Some (List.map snd args);
-            consumer = Some (snd f);
-            iter_loc = expr.spexp_loc;
-          })
-       else { attr = iter_attr; iter_name = iter_name; arg_names = []; body = None; arg_values = None; consumer = None; iter_loc = expr.spexp_loc }
-     in
+
+     let iter_attr =
+       let anon = extract_fun args in
+       let f = List.hd anon in
+       let args = List.tl anon in
+       let names, body = List.hd (List.map (fun x -> extract_args (snd x) []) [f]) in
+       { attr = iter_attr;
+         arg_names = names;
+         iter_name = iter_name;
+         body = Some body;
+         arg_values = Some (List.map snd args);
+         consumer = Some (snd f);
+         iter_loc = expr.spexp_loc;
+       } in
      mk_iter (iter_attr) info
   | Uast.Sexp_apply ({ spexp_desc = Sexp_ident s; _ }, arg_expr_list, _) ->
       let id_loc = T.location s.loc in
@@ -799,7 +802,7 @@ and expression_of_term info term =
       Eidapp (qd, terms)
   | _ -> assert false (* TODO *)
 and mk_iter iter_attr info =
-  let (attr, arg_names, arg_values, consumer) = (iter_attr.attr, iter_attr.arg_names, iter_attr.arg_values, iter_attr.consumer) in
+  let (attr, arg_names, arg_values) = (iter_attr.attr, iter_attr.arg_names, iter_attr.arg_values) in
 
   (* make a map (name, term) of the arguments *)
   populate_map attr.iter_args;
@@ -840,10 +843,31 @@ and mk_iter iter_attr info =
   let info = if attr.is_fold then Odecl.add_nesting info [acc'] else info in
   let info = Odecl.add_nesting info [it'] in
 
-  let invariant = List.fold_right (fun x v -> Tapply(mkt v, x)) (List.rev info.info_nesting) (Uterm.term true invariant).term_desc  in
+  let unfold_tuple t =
+    match t.term_desc with
+    | Ttuple t -> t
+    | _ -> [t] in
+
+  let invariant = Uterm.term true invariant in
+  let invariant = match invariant.term_desc with
+    | Tquant (_, bl, _, t) ->
+       let names = List.map (fun (_, i, _, _) -> Option.get i) bl in
+       List.fold_right2 (fun x n v -> aform_t n x v ) (List.rev info.info_nesting) names t
+    |  _ -> mkt (List.fold_right (fun x v -> Tapply(mkt v, x)) (List.rev info.info_nesting) invariant.term_desc)  in
 
   (* variant { it.type_variant }*)
-  let var = Tapply(mkt (Tapply(Uterm.term false convergence, it')), Uterm.term false collection ) in
+  let var = Uterm.term true convergence in
+  let var = match var.term_desc with
+    | Tquant (_, bl, _, t) ->
+       let names = List.map (fun (_, i, _, _) -> Option.get i) bl in
+       let collection = Uterm.term true collection in
+       (* used pattern match the tuple *)
+       (* tuple must be exhaustive *)
+       let unfolded = unfold_tuple collection in
+       (* bad heuristic but it works *)
+       let collection = if List.length (unfolded) < List.length(names) then unfolded else [collection] in
+       List.fold_right2 (fun x n v -> aform_t n x v ) (collection @ [it']) names t
+    |  _ -> mkt (List.fold_right (fun x v -> Tapply(mkt v, x)) (List.rev info.info_nesting) var.term_desc)  in
 
   let q s = Qdot (cursor, mk_id s) in
   (* it.next -> ListCursor.next it *)
@@ -851,10 +875,7 @@ and mk_iter iter_attr info =
   (* it.has_next -> ListCursor.has_next it *)
   let has_next = mk_expr (Eapply (mk_expr (Eident (q "has_next")), mk_expr (Eident (Qident it)) )) in
 
-  let f = Option.get consumer in
-
   (* applying function parameter *)
-  let func = mk_expr (expression_desc (info) (T.location loc) f.spexp_desc ) in
 
   (* produced element *)
   let x' = mk_expr (Eident (Qident x)) in
@@ -864,11 +885,11 @@ and mk_iter iter_attr info =
     (* acc := f acc.contents x *)
     (* this is so bad *)
     if attr.is_fold then
-      let aform name value e = mk_expr (Elet(name, false, Expr.RKnone, value, e)) in
 
       let func = mk_expr (expression_desc info (T.location loc) (Option.get iter_attr.body).spexp_desc) in
-      let acc_name = List.nth arg_names 1 in
-      let col_name = List.nth arg_names 0 in
+      let acc_ind = Hashtbl.find info.info_iter_argument cursor_name - 1 in
+      let acc_name = List.nth arg_names acc_ind in
+      let col_name = List.nth arg_names (if acc_ind = 0 then 1 else 0) in
 
       let acc_contents = mk_expr (Eidapp (Qident (mk_id "contents"), [ mk_expr (Eident (Qident (acc_val)))])) in
       let applied = aform (mk_id acc_name) acc_contents func in
@@ -877,10 +898,10 @@ and mk_iter iter_attr info =
       mk_expr (Eassign([acc_val, None, applied]))
     else
     (* let _ = f x in *)
-      mk_expr
-        (simplify_let_pattern Expr.RKnone
-           (mk_expr (Eapply (func, x')))
-           (T.mk_pattern Pwild) unit)
+      let col_name = List.nth arg_names 0 in
+      let func = mk_expr (expression_desc info (T.location loc) (Option.get iter_attr.body).spexp_desc) in
+      let applied = aform (mk_id col_name) x' func in
+      mk_expr (simplify_let_pattern Expr.RKnone (applied) (T.mk_pattern Pwild) unit)
   in
 
   (* let x = it.next in *)
@@ -890,7 +911,7 @@ and mk_iter iter_attr info =
 
  (* while spec *)
   let e =
-    mk_expr (Ewhile (has_next, [ mkt invariant ], [ (mkt var, None) ], e))
+    mk_expr (Ewhile (has_next, [ mkt invariant.term_desc ], [ (mkt var.term_desc, None) ], e))
   in
 
   (* !acc ret val *)

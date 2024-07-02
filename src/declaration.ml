@@ -401,22 +401,19 @@ let mk_cursor info (sval: Uast.s_val_description) =
 
   let elt = get_pty "elt" in
   let structure = get_pty "structure" in
-  let collection = get_pty "collection" in
-  let accumulator = get_pty "accumulator" in
-  let accumulator = get_acc_from_header spec accumulator in
-  O.add_iter_argument info accumulator;
 
-  let collection =
-    match collection with
-    | PTtyvar c -> Identifier.Preid.get_str c
-    | PTtyapp (c, _) ->
-       (match c with
-       | Qpreid q -> Identifier.Preid.get_str q
-       | _ -> assert false)
-    | _ -> assert false in
+  if iter_spec.is_fold then
+    begin
+    let accumulator = get_pty "accumulator" in
+    let accumulator = get_acc_from_header spec accumulator in
+    O.add_iter_argument info accumulator
+    end
+
+    ;
+
 
   let create_param = (Loc.dummy_position,
-                      Some (T.mk_id collection),
+                      Some (T.mk_id "collection"),
                       false,
                       (Uterm.pty structure)
                      ) in

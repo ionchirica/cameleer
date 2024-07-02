@@ -312,6 +312,11 @@ module Stdlib
       raises  { Empty -> q.view = empty /\ q.view = (old q).view }
       ensures { (old q).view = cons result q.view }
 
+    val unsafe_pop (q: t 'a) : 'a
+      writes  { q }
+      requires { q.view <> empty }
+      ensures { (old q).view = cons result q.view }
+
     val top (q: t 'a) : 'a
       raises  { Empty -> q.view = empty }
       ensures { result = Seq.get q.view 0 }

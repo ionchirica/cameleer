@@ -2,10 +2,10 @@ module Cursor
 
   use seq.Seq
 
-  type cursor 'a = private {
-    ghost mutable visited : seq 'a;
-    permitted : seq 'a -> bool;
-    complete : seq 'a -> bool;
+  type cursor 'a = abstract {
+    mutable visited : seq 'a;
+            permitted : seq 'a -> bool;
+            complete : seq 'a -> bool;
   } invariant { permitted visited }
   by { visited = empty ;
        permitted = ( fun _ -> true );

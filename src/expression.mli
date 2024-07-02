@@ -4,6 +4,8 @@ open Why3
 open Odecl
 module P = Parsetree
 
+type binder_info
+
 val string_of_longident : Longident.t -> string
 val empty_spec : Ptree.spec
 val mk_expr : ?expr_loc:Loc.position -> Ptree.expr_desc -> Ptree.expr
@@ -24,3 +26,5 @@ val exception_constructor :
 val s_value_binding : info -> Uast.s_value_binding -> Ptree.ident * Ptree.expr
 
 val expression_desc : info -> Why3.Loc.position -> Uast.s_expression_desc -> Ptree.expr_desc
+
+val binder_of_pattern : info -> P.pattern -> Ptree.binder * binder_info
