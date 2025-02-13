@@ -216,6 +216,7 @@ and inner_pattern info P.{ ppat_desc; ppat_loc; _ } =
     | Ppat_construct (id, None) -> mk_papp_no_args (longident id.txt)
     | Ppat_construct (id, Some (_, { ppat_desc = Ppat_tuple pat_list; _ })) ->
         let s = string_of_longident id.txt in
+        Odecl.add_info info s (List.length pat_list);
         let args = pat_arith info s pat_list in
         mk_papp (longident id.txt) args
     | Ppat_construct (id, Some (_, p)) ->
