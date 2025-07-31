@@ -36,13 +36,11 @@ let empty_info () =
     info_arith_construct = Hashtbl.create 32;
     info_refinement = Hashtbl.create 32;
     info_iter_argument = Hashtbl.create 32;
-    info_nesting = []
+    info_nesting = [];
   }
 
 let add_info info id arith = Hashtbl.add info.info_arith_construct id arith
-
 let add_nesting info t = { info with info_nesting = t @ info.info_nesting }
-
 let add_iter_argument info (s, i) = Hashtbl.add info.info_iter_argument s i
 
 let add_info_refinement info id info_refinement =
@@ -79,10 +77,13 @@ let mk_cloneexport ?odecl_loc id clone_subst =
 module Iteration = struct
   open Gospel.Utils
   open Gospel
+
   let args = Hstr.create 16
 
   let populate_map l =
-    List.iter (fun (x, y) -> match x with | Some x -> Hstr.add args x y | None -> ()) l
+    List.iter
+      (fun (x, y) -> match x with Some x -> Hstr.add args x y | None -> ())
+      l
 
   let get_term a =
     let x =
@@ -91,7 +92,7 @@ module Iteration = struct
         let err = Printf.sprintf "Missing %s argument" a in
         failwith err
     in
-    match (x: Uast.iter_arg_type) with
+    match (x : Uast.iter_arg_type) with
     | Term x -> x
     | Pty _ -> failwith "Not a term"
 
@@ -102,11 +103,9 @@ module Iteration = struct
         let err = Printf.sprintf "Missing %s argument" a in
         failwith err
     in
-    match (x: Uast.iter_arg_type) with
+    match (x : Uast.iter_arg_type) with
     | Pty y -> y
     | Term _ -> failwith "Not a Pty"
 
-
-  let get_term_opt a =
-    Hstr.find_opt args a
+  let get_term_opt a = Hstr.find_opt args a
 end

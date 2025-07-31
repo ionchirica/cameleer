@@ -41,7 +41,7 @@ val mk_dlogic :
 val mk_dprop :
   Loc.position -> Decl.prop_kind -> Ptree.ident -> Ptree.term -> odecl
 
-val add_iter_argument: info -> (string * int) -> unit
+val add_iter_argument : info -> string * int -> unit
 val add_nesting : info -> Ptree.term list -> info
 
 val mk_ind :
@@ -71,9 +71,10 @@ val mk_cloneexport :
 
 module Iteration : sig
   open Gospel
+
   val args : Uast.iter_arg_type Gospel.Utils.Hstr.t
-  val populate_map: (string option * Uast.iter_arg_type) list -> unit
-  val get_term: string -> Uast.term
-  val get_pty: string -> Uast.pty
-  val get_term_opt: string -> Uast.iter_arg_type option
+  val populate_map : (string option * Uast.iter_arg_type) list -> unit
+  val get_term : string -> Uast.term
+  val get_pty : string -> Uast.pty
+  val get_term_opt : string -> Uast.iter_arg_type option
 end

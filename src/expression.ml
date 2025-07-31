@@ -17,10 +17,9 @@ let rec string_of_longident = function
 
 let rec qualid_of_longident_mod = function
   | Longident.Lident s -> Qident (T.mk_id s)
-  | Ldot (t, s) -> Qdot ((qualid_of_longident_mod t),  (T.mk_id (String.capitalize_ascii s)))
+  | Ldot (t, s) ->
+      Qdot (qualid_of_longident_mod t, T.mk_id (String.capitalize_ascii s))
   | _ -> assert false
-
-
 
 (* TO BE USED : *)
 (* let rec_flag = function Nonrecursive -> false | Recursive -> true *)
@@ -69,10 +68,10 @@ let mk_pas ?(ghost = false) pat id = Pas (pat, id, ghost)
 (** Smart constructors for Ptree expressions *)
 
 let mk_expr ?(expr_loc = T.dummy_loc) expr_desc = { expr_desc; expr_loc }
+let aform name value e = mk_expr (Elet (name, false, Expr.RKnone, value, e))
 
-let aform name value e = mk_expr (Elet(name, false, Expr.RKnone, value, e))
-
-let aform_t name value t = T.mk_term ~term_loc:Loc.dummy_position (Tlet (name, value, t))
+let aform_t name value t =
+  T.mk_term ~term_loc:Loc.dummy_position (Tlet (name, value, t))
 
 let mk_fun_def ghost rs_kind (id, fun_expr) =
   let args, ret, spec, expr =
@@ -104,37 +103,42 @@ let id_anonymous loc = { id_str = "_"; id_ats = []; id_loc = loc }
 let re_pat pat d = { pat with pat_desc = d }
 
 type iter = {
-    attr: Uast.iter_attr;
-    body: Uast.s_expression option;
-    iter_name: t loc;
-    arg_names: label list;
-    arg_values: (Uast.s_expression list) option;
-    consumer: Uast.s_expression option;
-    iter_loc: Ppxlib.Location.t;
-  }
+  attr : Uast.iter_attr;
+  body : Uast.s_expression option;
+  iter_name : t loc;
+  arg_names : label list;
+  arg_values : Uast.s_expression list option;
+  consumer : Uast.s_expression option;
+  iter_loc : Ppxlib.Location.t;
+}
 
 (* this function extracts both the anonymous function as its
    supplied arguments *)
-let rec extract_fun (args: (arg_label * Uast.s_expression) list) =
+let rec extract_fun (args : (arg_label * Uast.s_expression) list) =
   match args with
-  | (_, ( { spexp_desc = Sexp_fun   _ ; _ } |
-          { spexp_desc = Sexp_ident _ ; _ } |
-          { spexp_desc = Sexp_tuple _ ; _ } |
-          { spexp_desc = Sexp_constant _ ; _ } |
-          { spexp_desc = Sexp_apply _ ; _ }  ) as f) :: t -> f :: extract_fun t
+  | (( _,
+       ( { spexp_desc = Sexp_fun _; _ }
+       | { spexp_desc = Sexp_ident _; _ }
+       | { spexp_desc = Sexp_tuple _; _ }
+       | { spexp_desc = Sexp_constant _; _ }
+       | { spexp_desc = Sexp_apply _; _ } ) ) as f)
+    :: t ->
+      f :: extract_fun t
   | _ :: t -> extract_fun t
   | [] -> []
 
 (* THIS IS not so HORRIBLE!
    this extracts the argument names and the function body of an anonymous function
    deal with it 🤠 *)
-let rec extract_args (f: Uast.s_expression) names =
+let rec extract_args (f : Uast.s_expression) names =
   match f with
-  | { spexp_desc = Sexp_fun (_, _, {
-                                 ppat_desc = Ppat_var {txt = name; _}; _ }, t, _ )
-    ; _
-    } ->  extract_args t (name :: names)
-  | _ -> names, f
+  | {
+   spexp_desc =
+     Sexp_fun (_, _, { ppat_desc = Ppat_var { txt = name; _ }; _ }, t, _);
+   _;
+  } ->
+      extract_args t (name :: names)
+  | _ -> (names, f)
 
 let simplify_let_pattern ?loc kind d pat e =
   let cast e ty = { e with expr_desc = Ecast (e, ty) } in
@@ -196,7 +200,6 @@ let rec longident ?(id_loc = T.dummy_loc) ?(prefix = "") = function
   | _ -> assert false
 (* TODO *)
 
-
 let rec core_type P.{ ptyp_desc; ptyp_loc; _ } =
   match ptyp_desc with
   | Ptyp_any -> assert false (* TODO *)
@@ -226,7 +229,8 @@ let rec id_of_pat P.{ ppat_desc; _ } =
   | Ppat_constant _ -> assert false (* TODO *)
   | Ppat_interval _ -> assert false (* TODO *)
   | Ppat_tuple _ -> assert false
-  | Ppat_construct _ ->  assert false (* T.(mk_id ~id_loc:(location ppat_loc) "unit") *)
+  | Ppat_construct _ ->
+      assert false (* T.(mk_id ~id_loc:(location ppat_loc) "unit") *)
   | Ppat_variant _ -> assert false (* TODO *)
   | Ppat_record _ -> assert false (* TODO *)
   | Ppat_array _ -> assert false (* TODO *)
@@ -680,24 +684,30 @@ let rec expression_desc info expr_loc expr_desc =
   | Uast.Sexp_apply (s, [ (_, arg) ], iter_attr) when is_raise s.spexp_desc ->
       ignore iter_attr;
       apply_raise info arg.spexp_desc
-  | Uast.Sexp_apply ({ spexp_desc = Sexp_ident iter_name; _ } as expr, args, iter_attr)
+  | Uast.Sexp_apply
+      (({ spexp_desc = Sexp_ident iter_name; _ } as expr), args, iter_attr)
     when Option.is_some iter_attr ->
-     let iter_attr = Option.get iter_attr in
+      let iter_attr = Option.get iter_attr in
 
-     let iter_attr =
-       let anon = extract_fun args in
-       let f = List.hd anon in
-       let args = List.tl anon in
-       let names, body = List.hd (List.map (fun x -> extract_args (snd x) []) [f]) in
-       { attr = iter_attr;
-         arg_names = names;
-         iter_name = iter_name;
-         body = Some body;
-         arg_values = Some (List.map snd args);
-         consumer = Some (snd f);
-         iter_loc = expr.spexp_loc;
-       } in
-     mk_iter (iter_attr) info
+      let iter_attr =
+        let anon = extract_fun args in
+        let f = List.hd anon in
+        let _, body = f in
+        let args = List.tl anon in
+        let names, _ =
+          List.hd (List.map (fun x -> extract_args (snd x) []) [ f ])
+        in
+        {
+          attr = iter_attr;
+          arg_names = names;
+          iter_name;
+          body = Some body;
+          arg_values = Some (List.map snd args);
+          consumer = Some (snd f);
+          iter_loc = expr.spexp_loc;
+        }
+      in
+      mk_iter iter_attr info
   | Uast.Sexp_apply ({ spexp_desc = Sexp_ident s; _ }, arg_expr_list, _) ->
       let id_loc = T.location s.loc in
       mk_eidapp (longident ~id_loc s.txt) (List.map arg_expr arg_expr_list)
@@ -786,23 +796,26 @@ let rec expression_desc info expr_loc expr_desc =
   | Sexp_extension _ -> assert false (* TODO *)
   | Sexp_unreachable -> assert false (* TODO *)
   | Sexp_letop _ -> assert false
+
 (* TODO *)
 and expression_of_term info term =
   match term.term_desc with
   | Ttuple ts ->
-     Etuple (List.map (fun x -> mk_expr (expression_of_term info x)) ts)
-  | Tident qd ->
-     Eident qd
+      Etuple (List.map (fun x -> mk_expr (expression_of_term info x)) ts)
+  | Tident qd -> Eident qd
   | Tapply (t1, t2) ->
       let e1 = expression_of_term info t1 in
       let e2 = expression_of_term info t2 in
       Eapply (mk_expr e1, mk_expr e2)
   | Tidapp (qd, ts) ->
-      let terms = List.map (fun x -> mk_expr(expression_of_term info x)) ts in
+      let terms = List.map (fun x -> mk_expr (expression_of_term info x)) ts in
       Eidapp (qd, terms)
   | _ -> assert false (* TODO *)
+
 and mk_iter iter_attr info =
-  let (attr, arg_names, arg_values) = (iter_attr.attr, iter_attr.arg_names, iter_attr.arg_values) in
+  let attr, arg_names, arg_values =
+    (iter_attr.attr, iter_attr.arg_names, iter_attr.arg_values)
+  in
 
   (* make a map (name, term) of the arguments *)
   populate_map attr.iter_args;
@@ -816,8 +829,8 @@ and mk_iter iter_attr info =
   let loc = iter_attr.iter_loc in
 
   let x = mk_id "x" in
-  let it = mk_id ("it" ^ (string_of_int (List.length(info.info_nesting)))) in
-  let acc_val = mk_id ("acc" ^ (string_of_int (List.length(info.info_nesting)))) in
+  let it = mk_id ("it" ^ string_of_int (List.length info.info_nesting)) in
+  let acc_val = mk_id ("acc" ^ string_of_int (List.length info.info_nesting)) in
   let mkt d = T.mk_term ~term_loc:(T.location loc) d in
   let mk_expr e = mk_expr e ~expr_loc:(T.location loc) in
   let cursor_qd = qualid_of_longident_mod iter_attr.iter_name.txt in
@@ -825,55 +838,81 @@ and mk_iter iter_attr info =
   let rec extract_cursor_name = function
     | Longident.Lident s -> s
     | Ldot (_, s) -> s
-    | Lapply (_, t2) -> extract_cursor_name t2 in
+    | Lapply (_, t2) -> extract_cursor_name t2
+  in
 
   let cursor_name = extract_cursor_name iter_attr.iter_name.txt in
-  let cursor_create s = Qdot((cursor_qd), s) in
-  let cursor = Qident(T.mk_id "Cursor") in
+  let cursor_create s = Qdot (cursor_qd, s) in
+  let cursor_create_ident s = Qdot (Qident (T.mk_id "S"), s) in
+  let cursor = Qident (T.mk_id "Cursor") in
 
-  let field fst snd =
-    Tidapp
-      ( (Qident fst),
-        ([mkt (Tident (Qident snd))]) )
-  in
+  let field fst snd = Tidapp (Qident fst, [ mkt (Tident (Qident snd)) ]) in
 
   let it' = mkt (field (mk_id "visited") it) in
   let acc' = mkt (field (mk_id "contents") acc_val) in
 
-  let info = if attr.is_fold then Odecl.add_nesting info [acc'] else info in
-  let info = Odecl.add_nesting info [it'] in
+  let info =
+    match attr.iter_pat with
+    | Fold | Map | Filter -> Odecl.add_nesting info [ acc' ]
+    | Iter -> info
+  in
+  let info = Odecl.add_nesting info [ it' ] in
 
-  let unfold_tuple t =
-    match t.term_desc with
-    | Ttuple t -> t
-    | _ -> [t] in
+  let unfold_tuple t = match t.term_desc with Ttuple t -> t | _ -> [ t ] in
 
   let invariant = Uterm.term true invariant in
-  let invariant = match invariant.term_desc with
+  let invariant =
+    match invariant.term_desc with
     | Tquant (_, bl, _, t) ->
-       let names = List.map (fun (_, i, _, _) -> Option.get i) bl in
-       List.fold_right2 (fun x n v -> aform_t n x v ) (List.rev info.info_nesting) names t
-    |  _ -> mkt (List.fold_right (fun x v -> Tapply(mkt v, x)) (List.rev info.info_nesting) invariant.term_desc)  in
+        let names = List.map (fun (_, i, _, _) -> Option.get i) bl in
+        List.fold_right2
+          (fun x n v -> aform_t n x v)
+          (List.rev info.info_nesting)
+          names t
+    | _ ->
+        mkt
+          (List.fold_right
+             (fun x v -> Tapply (mkt v, x))
+             (List.rev info.info_nesting)
+             invariant.term_desc)
+  in
 
   (* variant { it.type_variant }*)
   let var = Uterm.term true convergence in
-  let var = match var.term_desc with
+  let var =
+    match var.term_desc with
     | Tquant (_, bl, _, t) ->
-       let names = List.map (fun (_, i, _, _) -> Option.get i) bl in
-       let collection = Uterm.term true collection in
-       (* used pattern match the tuple *)
-       (* tuple must be exhaustive *)
-       let unfolded = unfold_tuple collection in
-       (* bad heuristic but it works *)
-       let collection = if List.length (unfolded) < List.length(names) then unfolded else [collection] in
-       List.fold_right2 (fun x n v -> aform_t n x v ) (collection @ [it']) names t
-    |  _ -> mkt (List.fold_right (fun x v -> Tapply(mkt v, x)) (List.rev info.info_nesting) var.term_desc)  in
+        let names = List.map (fun (_, i, _, _) -> Option.get i) bl in
+        let collection = Uterm.term true collection in
+        (* used pattern match the tuple *)
+        (* tuple must be exhaustive *)
+        let unfolded = unfold_tuple collection in
+        (* bad heuristic but it works *)
+        let collection =
+          if List.length unfolded < List.length names then unfolded
+          else [ collection ]
+        in
+        List.fold_right2
+          (fun x n v -> aform_t n x v)
+          (collection @ [ it' ]) names t
+    | _ ->
+        mkt
+          (List.fold_right
+             (fun x v -> Tapply (mkt v, x))
+             (List.rev info.info_nesting)
+             var.term_desc)
+  in
 
   let q s = Qdot (cursor, mk_id s) in
   (* it.next -> ListCursor.next it *)
-  let next = mk_expr (Eapply (mk_expr (Eident (q "next")), mk_expr (Eident (Qident it)))) in
+  let next =
+    mk_expr (Eapply (mk_expr (Eident (q "next")), mk_expr (Eident (Qident it))))
+  in
   (* it.has_next -> ListCursor.has_next it *)
-  let has_next = mk_expr (Eapply (mk_expr (Eident (q "has_next")), mk_expr (Eident (Qident it)) )) in
+  let has_next =
+    mk_expr
+      (Eapply (mk_expr (Eident (q "has_next")), mk_expr (Eident (Qident it))))
+  in
 
   (* applying function parameter *)
 
@@ -884,24 +923,81 @@ and mk_iter iter_attr info =
   let e =
     (* acc := f acc.contents x *)
     (* this is so bad *)
-    if attr.is_fold then
+    match attr.iter_pat with
+    | Fold ->
+        let func =
+          mk_expr
+            (expression_desc info (T.location loc)
+               (Option.get iter_attr.body).spexp_desc)
+        in
+        let acc_ind = Hashtbl.find info.info_iter_argument cursor_name - 1 in
+        let acc_name = List.nth arg_names acc_ind in
+        let col_name = List.nth arg_names (if acc_ind = 0 then 1 else 0) in
 
-      let func = mk_expr (expression_desc info (T.location loc) (Option.get iter_attr.body).spexp_desc) in
-      let acc_ind = Hashtbl.find info.info_iter_argument cursor_name - 1 in
-      let acc_name = List.nth arg_names acc_ind in
-      let col_name = List.nth arg_names (if acc_ind = 0 then 1 else 0) in
+        let acc_contents =
+          mk_expr
+            (Eidapp
+               (Qident (mk_id "contents"), [ mk_expr (Eident (Qident acc_val)) ]))
+        in
 
-      let acc_contents = mk_expr (Eidapp (Qident (mk_id "contents"), [ mk_expr (Eident (Qident (acc_val)))])) in
-      let applied = aform (mk_id acc_name) acc_contents func in
-      let applied = aform (mk_id col_name) x' applied in
-      let acc_val = mk_expr (Eident (Qident (acc_val))) in
-      mk_expr (Eassign([acc_val, None, applied]))
-    else
-    (* let _ = f x in *)
-      let col_name = List.nth arg_names 0 in
-      let func = mk_expr (expression_desc info (T.location loc) (Option.get iter_attr.body).spexp_desc) in
-      let applied = aform (mk_id col_name) x' func in
-      mk_expr (simplify_let_pattern Expr.RKnone (applied) (T.mk_pattern Pwild) unit)
+        let applied = aform (mk_id acc_name) acc_contents func in
+        let applied = aform (mk_id col_name) x' applied in
+
+        let acc_val = mk_expr (Eident (Qident acc_val)) in
+        mk_expr (Eassign [ (acc_val, None, applied) ])
+    | Iter ->
+        (* let _ = f x in *)
+        let col_name = List.nth arg_names 0 in
+        let func =
+          mk_expr
+            (expression_desc info (T.location loc)
+               (Option.get iter_attr.body).spexp_desc)
+        in
+        let applied = aform (mk_id col_name) x' func in
+        mk_expr
+          (simplify_let_pattern Expr.RKnone applied (T.mk_pattern Pwild) unit)
+    | Filter ->
+        let func =
+          mk_expr
+            (expression_desc info (T.location loc)
+               (Option.get iter_attr.body).spexp_desc)
+        in
+        let acc_contents =
+          mk_expr
+            (Eidapp
+               (Qident (mk_id "contents"), [ mk_expr (Eident (Qident acc_val)) ]))
+        in
+        let add_structure args =
+          mk_expr (Eidapp (cursor_create_ident (T.mk_id "add_structure"), args))
+        in
+        let if_test = mk_expr (Eapply (func, x')) in
+        let add_new_element = add_structure [ acc_contents; x' ] in
+        let acc_val = mk_expr (Eident (Qident acc_val)) in
+        mk_expr
+          (Eif
+             ( if_test,
+               mk_expr (Eassign [ (acc_val, None, add_new_element) ]),
+               mk_expr (Etuple []) ))
+    | Map ->
+        let func =
+          mk_expr
+            (expression_desc info (T.location loc)
+               (Option.get iter_attr.body).spexp_desc)
+        in
+
+        let acc_contents =
+          mk_expr
+            (Eidapp
+               (Qident (mk_id "contents"), [ mk_expr (Eident (Qident acc_val)) ]))
+        in
+        let add_structure args =
+          mk_expr (Eidapp (cursor_create_ident (T.mk_id "add_structure"), args))
+        in
+
+        let applied = mk_expr (Eapply (func, x')) in
+        let add_new_element = add_structure [ acc_contents; applied ] in
+        let acc_val = mk_expr (Eident (Qident acc_val)) in
+        mk_expr (Eassign [ (acc_val, None, add_new_element) ])
   in
 
   (* let x = it.next in *)
@@ -909,35 +1005,79 @@ and mk_iter iter_attr info =
     mk_expr (simplify_let_pattern Expr.RKnone next (T.mk_pattern (Pvar x)) e)
   in
 
- (* while spec *)
+  (* while spec *)
   let e =
-    mk_expr (Ewhile (has_next, [ mkt invariant.term_desc ], [ (mkt var.term_desc, None) ], e))
+    mk_expr
+      (Ewhile
+         ( has_next,
+           [ mkt invariant.term_desc ],
+           [ (mkt var.term_desc, None) ],
+           e ))
   in
 
   (* !acc ret val *)
-  let e = if attr.is_fold then
-          let acc_contents = mk_expr (Eidapp (Qident (mk_id "contents"), [ mk_expr (Eident (Qident acc_val))])) in
-          mk_expr (Esequence (e, acc_contents))
-          else e in
+  let e =
+    match attr.iter_pat with
+    | Iter -> e
+    | _ ->
+        let acc_contents =
+          mk_expr
+            (Eidapp
+               (Qident (mk_id "contents"), [ mk_expr (Eident (Qident acc_val)) ]))
+        in
+        mk_expr (Esequence (e, acc_contents))
+  in
 
   let vals = Option.get arg_values in
-  let create = mk_expr (Eapply ( mk_expr ( Eident (cursor_create (T.mk_id "create")) ), mk_expr collection_expr)) in
+  let create =
+    mk_expr
+      (Eapply
+         ( mk_expr (Eident (cursor_create (T.mk_id "create"))),
+           mk_expr collection_expr ))
+  in
 
-  if attr.is_fold then
-    (* copy values from anon func application *)
-    (* this is the index of the accumulator in the fold's signature, we
-       subtract one as [vals] does not consider the function *)
-    let acc_ind = Hashtbl.find info.info_iter_argument cursor_name - 1 in
-    let acc = List.nth vals acc_ind in
-    let acc = mk_expr (expression_desc (info) (T.location loc) acc.spexp_desc ) in
-    (* ref acc* *)
-    let acc_init = mk_expr (Eapply (mk_expr Eref, acc)) in
-    (* let acc = ref acc* in *)
-    let acc_init = mk_expr (simplify_let_pattern Expr.RKnone acc_init (T.mk_pattern (Pvar acc_val)) e) in
-    Elet (it, false, Expr.RKnone, create, acc_init)
-  else
-    (* let it = create collection in [e]*)
-   Elet (it, false, Expr.RKnone, create, e)
+  match attr.iter_pat with
+  | Fold ->
+      (* copy values from anon func application *)
+      (* this is the index of the accumulator in the fold's signature, we
+         subtract one as [vals] does not consider the function *)
+      let acc_ind = Hashtbl.find info.info_iter_argument cursor_name - 1 in
+      let acc = List.nth vals acc_ind in
+      let acc =
+        mk_expr (expression_desc info (T.location loc) acc.spexp_desc)
+      in
+      (* ref acc* *)
+      let acc_init = mk_expr (Eapply (mk_expr Eref, acc)) in
+      (* let acc = ref acc* in *)
+      let acc_init =
+        mk_expr
+          (simplify_let_pattern Expr.RKnone acc_init
+             (T.mk_pattern (Pvar acc_val))
+             e)
+      in
+      Elet (it, false, Expr.RKnone, create, acc_init)
+  | Filter | Map ->
+      (* this is the index of the accumulator in the fold's signature, we
+         subtract one as [vals] does not consider the function *)
+      let acc =
+        mk_expr
+          (Eidapp
+             ( cursor_create_ident (T.mk_id "empty_structure"),
+               [ mk_expr (Etuple []) ] ))
+      in
+      (* ref acc* *)
+      let acc_init = mk_expr (Eapply (mk_expr Eref, acc)) in
+      (* let acc = ref acc* in *)
+      let acc_init =
+        mk_expr
+          (simplify_let_pattern Expr.RKnone acc_init
+             (T.mk_pattern (Pvar acc_val))
+             e)
+      in
+      Elet (it, false, Expr.RKnone, create, acc_init)
+  | Iter ->
+      (* let it = create collection in [e]*)
+      Elet (it, false, Expr.RKnone, create, e)
 
 and expression info Uast.({ spexp_desc; spexp_attributes; _ } as e) =
   let expr_loc = T.location e.spexp_loc in
@@ -1159,7 +1299,10 @@ and s_value_binding info svb =
         let match_desc = mk_ematch param reg_branch exn_branch in
         let match_expr = mk_expr match_desc ~expr_loc in
         let args, expr = subst_args_expr [ arg ] match_expr spec_uast in
-        let spec = spec svb.Uast.spvb_vspec (* TODO *) in
+        let spec =
+          spec svb.Uast.spvb_vspec
+          (* TODO *)
+        in
         let efun = mk_efun_visible args None spec expr in
         mk_expr efun ~expr_loc
     | _ -> expression info expr
