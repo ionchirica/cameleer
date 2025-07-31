@@ -359,6 +359,7 @@ module Stdlib
     use export seq.Distinct
     use export seq.Reverse
     use export seq.OfList
+    use export seq.Occ
 
   end
 

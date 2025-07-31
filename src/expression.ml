@@ -692,9 +692,8 @@ let rec expression_desc info expr_loc expr_desc =
       let iter_attr =
         let anon = extract_fun args in
         let f = List.hd anon in
-        let _, body = f in
         let args = List.tl anon in
-        let names, _ =
+        let names, body =
           List.hd (List.map (fun x -> extract_args (snd x) []) [ f ])
         in
         {
@@ -843,7 +842,7 @@ and mk_iter iter_attr info =
 
   let cursor_name = extract_cursor_name iter_attr.iter_name.txt in
   let cursor_create s = Qdot (cursor_qd, s) in
-  let cursor_create_ident s = Qdot (Qident (T.mk_id "S"), s) in
+  let cursor_create_ident s = Qdot (Qident (T.mk_id "T"), s) in
   let cursor = Qident (T.mk_id "Cursor") in
 
   let field fst snd = Tidapp (Qident fst, [ mkt (Tident (Qident snd)) ]) in
@@ -939,10 +938,8 @@ and mk_iter iter_attr info =
             (Eidapp
                (Qident (mk_id "contents"), [ mk_expr (Eident (Qident acc_val)) ]))
         in
-
         let applied = aform (mk_id acc_name) acc_contents func in
         let applied = aform (mk_id col_name) x' applied in
-
         let acc_val = mk_expr (Eident (Qident acc_val)) in
         mk_expr (Eassign [ (acc_val, None, applied) ])
     | Iter ->
@@ -970,7 +967,12 @@ and mk_iter iter_attr info =
         let add_structure args =
           mk_expr (Eidapp (cursor_create_ident (T.mk_id "add_structure"), args))
         in
-        let if_test = mk_expr (Eapply (func, x')) in
+
+        let if_test =
+          if List.length arg_names > 0 then
+            aform (mk_id (List.hd arg_names)) x' func
+          else mk_expr (Eapply (func, x'))
+        in
         let add_new_element = add_structure [ acc_contents; x' ] in
         let acc_val = mk_expr (Eident (Qident acc_val)) in
         mk_expr
@@ -1040,7 +1042,7 @@ and mk_iter iter_attr info =
   | Fold ->
       (* copy values from anon func application *)
       (* this is the index of the accumulator in the fold's signature, we
-         subtract one as [vals] does not consider the function *)
+       subtract one as [vals] does not consider the function *)
       let acc_ind = Hashtbl.find info.info_iter_argument cursor_name - 1 in
       let acc = List.nth vals acc_ind in
       let acc =
