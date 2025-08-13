@@ -11,8 +11,6 @@ module Cursor
        permitted = ( fun _ -> true );
        complete = ( fun _ -> true ); }
 
-  axiom permitted_empty: forall c: cursor 'a. c.visited = empty -> c.permitted c.visited
-
   val next (c: cursor 'a) : 'a
     requires { not (c.complete c.visited) }
     writes   { c.visited }
