@@ -3,7 +3,7 @@ open Ptree
 open Gospel
 open Parser_frontend
 
-let debug = ref true
+let debug = ref false
 
 open Why3.Typing
 open Wstdlib
